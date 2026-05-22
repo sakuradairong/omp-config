@@ -1,25 +1,84 @@
+# Oh My Pi Agent Configuration
+# 融合了 sakuradairong 个人偏好 + kmou424 参考仓库的结构
+lastChangelogVersion: 15.2.4
+defaultThinkingLevel: xhigh
+serviceTier: auto
+hideThinkingBlock: false
+repeatToolDescriptions: false
+
 secrets: 
   enabled: true
+
 skills: 
   enabled: true
   customDirectories: 
     - ~/.omp/skills
     - ~/.claude/skills
+
+# 禁用的内置提供方（减少噪音，按需开启）
+disabledProviders: 
+  - claude
+  - claude-plugins
+  - codex
+  - agents
+  - gemini
+  - opencode
+  - cline
+  - github
+  - mcp-json
+
+# 启用的模型（wildcard 匹配）
+enabledModels: 
+  - deepseek/*
+  - self-hosted-openai/*
+  - nekocode-claude/*
+  - nekocode-openai/*
+  - opencode-go/*
+  - cursor/*
+
+# wow 扩展：自动注入多来源的上下文文件
+wow: 
+  contexts: 
+    - ~/.agents/contexts/*.md
+    - .agents/contexts/*.md
+    - docs/contexts/*.md
+    - AGENTS.md
+    - CLAUDE.md
+  logger: 
+    level: info
+  inject: 
+    enabled: false
+
 modelRoles: 
   default: opencode-go/deepseek-v4-pro:xhigh
-  plan: opencode-go/deepseek-v4-pro:off
+  smol: opencode-go/deepseek-v4-flash:off
   slow: opencode-go/deepseek-v4-pro:xhigh
+  vision: opencode-go/qwen3.5-plus
+  task: opencode-go/deepseek-v4-flash:xhigh
+  explore: opencode-go/deepseek-v4-flash:xhigh
+  plan: opencode-go/deepseek-v4-pro:off
   designer: opencode-go/deepseek-v4-flash:xhigh
+  commit: opencode-go/deepseek-v4-flash:off
+  reviewer: opencode-go/deepseek-v4-flash:xhigh
+  librarian: opencode-go/deepseek-v4-flash:xhigh
+  quick_task: opencode-go/deepseek-v4-flash:off
+
 memory: 
   backend: local
+
 compaction: 
   enabled: true
   reserveTokens: 16384
   keepRecentTokens: 20000
   autoContinue: true
+
 debug: 
   enabled: true
+
 steeringMode: one-at-a-time
 followUpMode: one-at-a-time
 interruptMode: immediate
-lastChangelogVersion: 15.1.3
+
+# 扩展（wow-omp 提供自动上下文注入等功能）
+extensions: 
+  - ~/.omp/agent/extensions/wow-omp

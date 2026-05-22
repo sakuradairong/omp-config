@@ -1,0 +1,39 @@
+# ~/.omp/agent/.gitignore
+# 忽略一切 — 仅追踪可版本化的配置文件
+
+*
+!.gitignore
+
+# —— 密钥文件 ——
+!.env.example
+
+# ── 顶层配置文件 ──
+!config.yml
+!models.yml
+!mcp.json
+!lsp.json
+!ssh.json
+!smithery.json
+!share.ts
+!share.js
+!share.mjs
+
+# ── 配置目录 ──
+!agents/
+!agents/**
+!skills/
+!skills/**
+!themes/
+!themes/**
+!tools/
+!tools/**
+!commands/
+!commands/**
+!prompts/
+!prompts/**
+!modules/
+!modules/**
+!contexts/
+!contexts/**
+!hooks/
+!hooks/**
