@@ -1,0 +1,25 @@
+secrets: 
+  enabled: true
+skills: 
+  enabled: true
+  customDirectories: 
+    - ~/.omp/skills
+    - ~/.claude/skills
+modelRoles: 
+  default: opencode-go/deepseek-v4-pro:xhigh
+  plan: opencode-go/deepseek-v4-pro:off
+  slow: opencode-go/deepseek-v4-pro:xhigh
+  designer: opencode-go/deepseek-v4-flash:xhigh
+memory: 
+  backend: local
+compaction: 
+  enabled: true
+  reserveTokens: 16384
+  keepRecentTokens: 20000
+  autoContinue: true
+debug: 
+  enabled: true
+steeringMode: one-at-a-time
+followUpMode: one-at-a-time
+interruptMode: immediate
+lastChangelogVersion: 15.1.3

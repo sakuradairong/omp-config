@@ -1,0 +1,61 @@
+# DeepSeek Model Override Config
+# Place at ~/.omp/agent/models.yml
+#
+# Problem:
+#   OpenCode Go API (opencode.ai/zen/go/v1) dynamically discovers model metadata,
+#   but doesn't expose reasoning/compat flags. This causes the omp runtime to treat
+#   DeepSeek models as non-reasoning, breaking:
+#     - reasoningEffortMap (xhigh not mapped to max)
+#     - requiresReasoningContentForToolCalls (false → reasoning_content not persisted)
+#     - Thinking mode configuration
+#
+# Fix:
+#   Hardcode model overrides that apply AFTER dynamic discovery, ensuring the
+#   correct compat flags survive.
+
+# Provider-level overrides — targeted by provider name
+providers:
+  opencode-go:
+    # Override specific models within the opencode-go provider
+    modelOverrides:
+      "deepseek-v4-flash":
+        reasoning: true
+        compat:
+          reasoningContentField: "reasoning_content"
+          requiresReasoningContentForToolCalls: true
+          supportsToolChoice: false
+          supportsReasoningEffort: true
+        thinking:
+          mode: "effort"
+          minLevel: "minimal"
+          maxLevel: "xhigh"
+      "deepseek-v4-pro":
+        reasoning: true
+        compat:
+          reasoningContentField: "reasoning_content"
+          requiresReasoningContentForToolCalls: true
+          supportsToolChoice: false
+          supportsReasoningEffort: true
+        thinking:
+          mode: "effort"
+          minLevel: "minimal"
+          maxLevel: "xhigh"
+
+# Also cover direct DeepSeek API path
+  deepseek:
+    modelOverrides:
+      "deepseek-v4-flash":
+        reasoning: true
+        compat:
+          requiresReasoningContentForToolCalls: true
+      "deepseek-v4-pro":
+        reasoning: true
+        compat:
+          requiresReasoningContentForToolCalls: true
+
+# Provider ordering (optional - currently defaults to opencode-go as default)
+# modelProviderOrder:
+#   - opencode-go
+
+# Model equivalence (optional - treat one model as equivalent to another)
+# equivalence_overrides: []

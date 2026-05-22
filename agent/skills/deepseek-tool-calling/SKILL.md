@@ -1,0 +1,189 @@
+---
+name: deepseek-tool-calling
+description: |
+  DeepSeek 模型工具调用最佳实践引导。
+  帮助 DeepSeek V4 系列模型正确格式化工具调用参数，
+  减少因 JSON 格式错误导致的调用失败。
+---
+
+# DeepSeek Tool Calling Guide
+
+## 为什么需要这个 skill
+
+DeepSeek 系列模型（尤其是 Flash 版本）在工具调用时有一些已知的模式差异。与其他模型（如 Claude、GPT）不同，DeepSeek 更容易出现特定的参数格式问题。这个 skill 帮助你在调用工具时避免这些常见错误。
+
+## 工具调用格式规则
+
+### 1. 数组字段（Arrays）
+
+DeepSeek 容易把数组字段写成单个字符串或空对象。正确的格式：
+
+✅ **正确格式 —— JSON 数组**
+```json
+{
+  "paths": ["src/main.ts", "src/utils.ts"]
+}
+```
+
+❌ **错误格式 —— 单个字符串**
+```json
+{
+  "paths": "src/main.ts"
+}
+```
+
+❌ **错误格式 —— JSON 字符串**
+```json
+{
+  "paths": "[\"src/main.ts\", \"src/utils.ts\"]"
+}
+```
+
+❌ **错误格式 —— 空对象**
+```json
+{
+  "paths": {}
+}
+```
+
+**常见数组字段：**
+- `paths` — 文件路径列表（find, search, ast_grep, ast_edit）
+- `ops` — AST 编辑操作列表（ast_edit）
+- `tasks` — 子任务列表（task）
+- `items` — 项目列表
+- `args` — 参数列表
+- `questions` — 问题列表（ask）
+
+### 2. 可选字段（Optional Fields）
+
+DeepSeek 容易把未使用的可选字段传为 `null`。这可能触发 schema 校验错误。
+
+✅ **正确格式 —— 省略不需要的字段**
+```json
+{
+  "path": "src/main.ts"
+}
+```
+
+❌ **错误格式 —— 传 null**
+```json
+{
+  "path": "src/main.ts",
+  "_i": null,
+  "query": null,
+  "reason": null
+}
+```
+
+**常见可选字段：**
+- `_i` — 工具调用意图描述（大部分工具都有）
+- `query` — 搜索查询（lsp, search）
+- `reason` — 原因描述（resolve）
+- `cwd` — 工作目录（bash）
+- `env` — 环境变量（bash）
+- `description` — 描述
+- `timeout` — 超时秒数（bash, task）
+
+### 3. 数值字段（Number Fields）
+
+DeepSeek 偶尔把数字写成字符串。
+
+✅ **正确格式 —— 纯数字**
+```json
+{
+  "limit": 10,
+  "timeout": 30
+}
+```
+
+❌ **错误格式 —— 字符串数字**
+```json
+{
+  "limit": "10",
+  "timeout": "30"
+}
+```
+
+❌ **错误格式 —— 带单位字符串**
+```json
+{
+  "timeout": "30seconds"
+}
+```
+
+### 4. 顶层参数（Top-level Arguments）
+
+DeepSeek 偶尔把整个参数对象包装成 JSON 字符串。
+
+✅ **正确格式 —— 直接传对象**
+```json
+{
+  "path": "src/main.ts",
+  "pattern": "TODO"
+}
+```
+
+❌ **错误格式 —— 字符串包裹**
+```json
+"{\"path\": \"src/main.ts\", \"pattern\": \"TODO\"}"
+```
+
+### 5. Enum 字段
+
+传递枚举值时使用小写，大小写会被自动匹配。
+
+✅ **正确格式**
+```json
+{
+  "action": "apply"
+}
+```
+
+✅ **会被自动修复**
+```json
+{
+  "action": "APPly"
+}
+```
+
+### 6. JSON 截断
+
+DeepSeek 在流式生成时可能产生截断的 JSON。如果看到类似以下错误，说明工具调用在流输出中被截断了：
+
+```
+Unexpected end of JSON input
+```
+
+如果是这种情况，需要等待完整输出再发送工具调用请求，或者使用更短的参数值。
+
+## 各工具参数速查
+
+| 工具 | 必需字段 | 数组字段 | 数字字段 | 可选字段 |
+|---|---|---|---|---|
+| `read` | path | - | - | _i |
+| `write` | path, content | - | - | _i |
+| `edit` | input | - | - | _i |
+| `search` | pattern, paths | paths | skip | _i, i, gitignore |
+| `find` | paths | paths | limit | _i, hidden |
+| `bash` | command | - | timeout | _i, env, cwd, pty |
+| `ast_grep` | pat, paths | paths | skip | _i |
+| `ast_edit` | ops, paths | ops, paths | - | _i |
+| `lsp` | action | - | line | file, symbol, query, timeout |
+| `eval` | input | - | - | - |
+| `task` | agent, tasks | tasks | - | context, schema |
+| `ask` | questions | questions | - | - |
+| `resolve` | action, reason | - | - | - |
+| `browser` | action | - | timeout | name, url, viewport, code, etc. |
+| `todo_write` | ops | ops | - | - |
+
+## 总结
+
+DeepSeek 工具调用的核心原则：
+
+1. **数组始终用 `[...]` 语法**，不要用字符串或对象
+2. **省略可选字段**，不要传 `null`
+3. **数字直接写数字**，不要加引号
+4. **参数直接传对象**，不要包字符串
+5. **枚举值用小写**（大写会自动匹配但更可靠的是小写）
+
+遵循这些规则可以避免 90% 以上的工具调用校验错误。
