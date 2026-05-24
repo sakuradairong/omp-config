@@ -189,6 +189,40 @@ Name collisions with built-ins are rejected (built-ins win).
 | `--system-prompt @file.txt` | Custom system prompt per run |
 | `--append-system-prompt @file.txt` | Extend default prompt |
 
+
+## 🔧 DeepSeek V4 模型专用模式
+
+### 模型选择策略
+- **deepseek-v4-pro**: 重型推理任务（架构设计、复杂调试、/plan 模式）
+- **deepseek-v4-flash**: 日常编码、工具调用、子代理任务
+- **deepseek-v4-flash:off** (非思考模式): commit message、simple classification、title generation
+
+### 思考模式 (Thinking Mode)
+- 默认启用思考模式；通过 `:off` 后缀关闭（如 `deepseek-v4-flash:off`）
+- reasoning_effort: `high` (默认) / `max` (xhigh 映射为 max)
+- 思考模式下 **不支持** `temperature`、`top_p` — 设置会被忽略
+- reasoning_content 在 tool_calls 轮次**必须回传**（hooks 自动处理）
+
+### 工具调用注意事项
+- 加载 skill: `skill://deepseek-tool-calling` 获取完整引导
+- 数组字段: 始终用 `[...]`，不要用字符串或 `{}`
+- 可选字段: 省略不要传 `null`
+- 数值字段: 直接写数字，不要加引号或单位
+- 锚点: 必须包含 2 位 hash 后缀（如 `9yf` 而非 `9`）
+
+### API 端点
+- **OpenAI 格式**: `deepseek` provider → `https://api.deepseek.com` (openai-completions)
+- **Anthropic 格式**: `deepseek-anthropic` provider → `https://api.deepseek.com/anthropic` (anthropic-messages)
+- **代理**: `opencode-go` provider → 通过 opencode.ai 代理（主用，内置优化）
+
+### 上下文窗口
+- deepseek-v4-pro / v4-flash: 1M 上下文，384K 最大输出
+- 接近限制时使用 `/compact` 压缩历史
+
+### 已知限制
+- 不支持 `developer` role → 使用 `system` role（compat 已配置）
+- Anthropic 格式不支持 image/document 类型 content block
+- Function calling strict 模式需使用 Beta endpoint (`https://api.deepseek.com/beta`)
 ---
 
 ## 🌍 全局工作流：Plan → Execute → Review → Commit

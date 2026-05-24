@@ -187,3 +187,45 @@ DeepSeek 工具调用的核心原则：
 5. **枚举值用小写**（大写会自动匹配但更可靠的是小写）
 
 遵循这些规则可以避免 90% 以上的工具调用校验错误。
+
+## 思考模式 + 工具调用
+
+### reasoning_content 回传规则
+
+DeepSeek 思考模式下，当模型进行了工具调用时，`reasoning_content` **必须**在后续所有轮次中完整回传给 API。否则 API 返回 400 错误。
+
+OMP 已通过 hooks 自动处理此规则（`opencode-deepseek-cot.ts`），但手动构造消息时需注意：
+
+✅ **正确 — 保留 reasoning_content**
+```json
+{
+  "role": "assistant",
+  "content": null,
+  "reasoning_content": "我需要调用工具来...",
+  "tool_calls": [...]
+}
+```
+
+❌ **错误 — 丢失 reasoning_content**
+```json
+{
+  "role": "assistant",
+  "content": null,
+  "tool_calls": [...]
+}
+```
+
+### 无工具调用的轮次
+
+如果 assistant 没有进行工具调用，其 `reasoning_content` 不需要回传，API 会自动忽略。
+
+## 模型版本
+
+- **deepseek-v4-pro**: 1M 上下文，384K 最大输出，默认思考模式
+- **deepseek-v4-flash**: 1M 上下文，384K 最大输出，支持思考/非思考模式
+- `deepseek-chat` / `deepseek-reasoner` 将于 2026/07/24 弃用
+
+## API 格式选择
+
+- **OpenAI 格式** (`openai-completions`): 完整功能支持，推荐使用
+- **Anthropic 格式** (`anthropic-messages`): 通过 `https://api.deepseek.com/anthropic`，不支持 image/document

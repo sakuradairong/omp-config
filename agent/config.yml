@@ -31,6 +31,7 @@ disabledProviders:
 enabledModels: 
   - deepseek/*
   - self-hosted-openai/*
+  - deepseek-anthropic/*
   - nekocode-claude/*
   - nekocode-openai/*
   - opencode-go/*
@@ -56,12 +57,13 @@ modelRoles:
   vision: opencode-go/qwen3.5-plus
   task: opencode-go/deepseek-v4-flash:xhigh
   explore: opencode-go/deepseek-v4-flash:xhigh
-  plan: opencode-go/deepseek-v4-pro:off
+  plan: opencode-go/deepseek-v4-pro:medium
   designer: opencode-go/deepseek-v4-flash:xhigh
   commit: opencode-go/deepseek-v4-flash:off
-  reviewer: opencode-go/deepseek-v4-flash:xhigh
+  reviewer: opencode-go/deepseek-v4-pro:low
   librarian: opencode-go/deepseek-v4-flash:xhigh
   quick_task: opencode-go/deepseek-v4-flash:off
+  oracle: opencode-go/deepseek-v4-pro:xhigh
 
 memory: 
   backend: local

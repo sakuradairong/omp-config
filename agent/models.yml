@@ -48,17 +48,111 @@ providers:
             thinking:
               type: enabled
 
-  # ── DeepSeek（直连 API，兜底方案）──
+  # ── DeepSeek（直连 API，OpenAI 格式）──
   deepseek:
-    modelOverrides:
-      deepseek-v4-pro:
+    baseUrl: https://api.deepseek.com
+    api: openai-completions
+    apiKey: DEEPSEEK_API_KEY
+    authHeader: true
+    models:
+      - id: deepseek-v4-pro
+        name: DeepSeek V4 Pro
         reasoning: true
+        thinking:
+          mode: effort
+          minLevel: high
+          maxLevel: xhigh
+        input: [text]
+        contextWindow: 1000000
+        maxTokens: 384000
+        cost:
+          input: 0.42
+          output: 0.84
+          cacheRead: 0.0035
+          cacheWrite: 0.42
         compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: true
+          maxTokensField: max_tokens
+          reasoningEffortMap:
+            high: high
+            xhigh: max
+          supportsToolChoice: false
           requiresReasoningContentForToolCalls: true
-      deepseek-v4-flash:
+          requiresAssistantContentForToolCalls: true
+          reasoningContentField: "reasoning_content"
+          extraBody:
+            thinking:
+              type: enabled
+      - id: deepseek-v4-flash
+        name: DeepSeek V4 Flash
         reasoning: true
+        thinking:
+          mode: effort
+          minLevel: high
+          maxLevel: xhigh
+        input: [text]
+        contextWindow: 1000000
+        maxTokens: 384000
+        cost:
+          input: 0.14
+          output: 0.28
+          cacheRead: 0.003
+          cacheWrite: 0.14
         compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: true
+          maxTokensField: max_tokens
+          reasoningEffortMap:
+            high: high
+            xhigh: max
+          supportsToolChoice: false
           requiresReasoningContentForToolCalls: true
+          requiresAssistantContentForToolCalls: true
+          reasoningContentField: "reasoning_content"
+          extraBody:
+            thinking:
+              type: enabled
+
+  # ── DeepSeek（直连 API，Anthropic 格式）──
+  # 使用 Anthropic Messages API 格式访问 DeepSeek 模型
+  # 参考: https://api-docs.deepseek.com/zh-cn/guides/anthropic_api
+  deepseek-anthropic:
+    baseUrl: https://api.deepseek.com/anthropic
+    api: anthropic-messages
+    apiKey: DEEPSEEK_API_KEY
+    authHeader: true
+    models:
+      - id: deepseek-v4-pro
+        name: DeepSeek V4 Pro (Anthropic)
+        reasoning: true
+        thinking:
+          mode: anthropic-adaptive
+          minLevel: high
+          maxLevel: xhigh
+        input: [text]
+        contextWindow: 1000000
+        maxTokens: 384000
+        cost:
+          input: 0.42
+          output: 0.84
+          cacheRead: 0.0035
+          cacheWrite: 0.42
+      - id: deepseek-v4-flash
+        name: DeepSeek V4 Flash (Anthropic)
+        reasoning: true
+        thinking:
+          mode: anthropic-adaptive
+          minLevel: high
+          maxLevel: xhigh
+        input: [text]
+        contextWindow: 1000000
+        maxTokens: 384000
+        cost:
+          input: 0.14
+          output: 0.28
+          cacheRead: 0.003
+          cacheWrite: 0.14
 
   # ═══════════════════════════════════════════════
   # 以下为扩展提供方，需在 ~/.omp/agent/.env 配置对应 API Key

@@ -46,8 +46,10 @@
 | default | deepseek-v4-pro | xhigh |
 | smol / commit / quick_task | deepseek-v4-flash | off |
 | slow | deepseek-v4-pro | xhigh |
-| designer / task / explore / reviewer / librarian | deepseek-v4-flash | xhigh |
-| plan | deepseek-v4-pro | off |
+| designer / task / explore / librarian | deepseek-v4-flash | xhigh |
+| plan | deepseek-v4-pro | medium |
+| reviewer | deepseek-v4-pro | low |
+| oracle | deepseek-v4-pro | xhigh |
 | vision | qwen3.5-plus | — |
 
 ### Hooks（钩子）
