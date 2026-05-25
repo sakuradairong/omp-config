@@ -26,6 +26,13 @@
     │       └── opencode-deepseek-tool-repair.ts # DeepSeek 工具调用修复
     └── skills/
         ├── deepseek-tool-calling/              # DeepSeek 工具调用最佳实践
+        │   ├── SKILL.md                        # 技能文档（含 §7 Hash Anchor 优化）
+        │   ├── edit_helper.py                  # edit 工具 hash anchor 自动纠错模块
+        │   ├── DESIGN.md                       # 设计说明
+        │   ├── COMPLETE_REPORT.md              # 完整设计报告
+        │   ├── TEST_REPORT_v2.md               # 第二轮测试报告
+        │   ├── TOCTOU_REPORT.md                # 并发冲突测试报告
+        │   └── V3_TEST_REPORT.md               # V3 循环测试报告
         ├── go-testing/                         # Go 测试规范
         ├── conventional-commits/               # Conventional Commits 规范
         └── docker-compose/                     # Docker Compose V2 专家
@@ -65,10 +72,25 @@
 | Skill | 来源 | 说明 |
 |-------|------|------|
 | plan-execute-review-commit | 自定义 | Plan → Execute → Review → Commit 四阶段工作流 |
-| deepseek-tool-calling | 自定义 | 指导模型避免工具调用 JSON 格式错误 |
+| deepseek-tool-calling | 自定义 | 工具调用格式指南 + `edit_helper.py` hash anchor 自动纠错 |
 | go-testing | 移植 | Go 测试规范（testify + 表驱动） |
 | conventional-commits | 移植 | 规范化 commit message |
 | docker-compose | 移植 | Docker Compose V2 最佳实践 |
+
+#### edit_helper
+
+`deepseek-tool-calling` 目录下的 `edit_helper.py` 解决 `edit` 工具 hash anchor（行号+随机 2 字节内容指纹）无法被 LLM 可靠复现的问题。
+
+核心原理：直接执行 edit，失败时从 edit 工具的拒绝消息中自动提取正确 hash 并重试。重试在同一 eval 调用内透明完成，无需 pre-read 或 invalidate_cache。
+
+```python
+exec(tool.read({"path": "skill://deepseek-tool-calling/edit_helper.py"})["text"])
+
+replace("/app.py", "ab", 42, 42, '    "debug": False')
+# hash 错误 → 自动纠正重试
+```
+
+累计测试：6 种语言，106 次操作，77 次 hash 纠正，0 次失败。
 
 ## 使用方法
 
