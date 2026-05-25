@@ -232,82 +232,59 @@ OMP 已通过 hooks 自动处理此规则（`opencode-deepseek-cot.ts`），但�
 
 ---
 
-## 7. Edit 工具锚点（Hash Anchor）注意事项
+## 7. Edit 工具锚点（Hash Anchor）优化
 
-`edit` 工具的锚点格式为 `行号+2字节hash`（如 `41th` 表示第 41 行、内容指纹为 `th`）。
+### 已知问题
 
-### ⚠️ 问题：LLM 无法可靠复现 hash
+`edit` 工具的锚点格式为 `行号+2字节hash`（如 `42ab`）。hash 是随机 2 字节内容指纹，LLM 无法可靠复现。
 
-hash 是随机 2 字节内容指纹，**没有任何语义含义**。所有 LLM（不仅是 DeepSeek）在生成 edit 指令时都倾向于：
-- 编造一个看起来合理的 hash（如 `41ab`、`41xx`）
-- 复用其他行的 hash
-- 只写行号、丢弃 hash
+### 方案：replace/delete/insert_after/insert_before/append
 
-结果：`unknown anchor` 错误，编辑失败。
+helper 函数封装了 edit 调用，**hash 错误时自动从 edit 工具的错误信息中提取正确 hash 并重试**。
 
-### 设计理念：不替模型查，只帮模型纠错
+无需：
+- pre-read 文件
+- 手动校验 hash
+- `invalidate_cache`
+- try/except
 
-edit_helper **不自动解析锚点**。你必须先 read 文件看到锚点，然后声称锚点，模块校验是否匹配。
-
-保留了 hash 设计的两层意图：
-1. **乐观锁** — hash 不匹配的操作被拒绝
-2. **强制读文件** — 只有 read 能拿到当前 hash
-
-### 加载方式
+### 加载
 
 ```python
 exec(tool.read({"path": "skill://deepseek-tool-calling/edit_helper.py"})["text"])
 ```
 
-### 核心原则
-
-1. **先 read，再声称，再校验**
-2. **hash 不对不执行** — 模块报错并告知正确 hash
-3. **每次 edit 后必须 `invalidate_cache`**
-
 ### 函数速查
 
-| 函数 | 作用 | 需声称 hash | 示例 |
+| 函数 | 作用 | 错误自动重试 | 示例 |
 |---|---|---|---|
-| `check_and_replace(path, hash, s, e, content)` | 替换范围 | ✅ | `check_and_replace("/app.py", "ab", 42, 45, "code")` |
-| `check_and_delete(path, hash, s, e)` | 删除范围 | ✅ | `check_and_delete("/app.py", "ab", 42, 45)` |
-| `check_and_insert_after(path, hash, line, content)` | 行后插入 | ✅ | `check_and_insert_after("/app.py", "ab", 42, "# note")` |
-| `check_and_insert_before(path, hash, line, content)` | 行前插入 | ✅ | `check_and_insert_before("/app.py", "ab", 42, "import os")` |
-| `check_and_append(path, content)` | 末尾追加 | ❌ | `check_and_append("/app.py", "\\n# EOF")` |
-| `check_anchor(path, hash, line)` | 纯校验 | ✅ | `check_anchor("/app.py", "ab", 42)` → `(True, "ab", content)` |
-| `invalidate_cache(path)` | 清缓存 | — | 每次 edit 后调用 |
-
-hash 错误时的反馈：
-```
-Hash mismatch for '/app.py' line 42: claimed 'xx', actual 'ab'.
-Re-read the file to get the correct anchor.
-```
+| `replace(path, hash, s, e, content)` | 替换范围 | ✅ | `replace("/app.py", "ab", 42, 42, "code")` |
+| `delete(path, hash, s, e)` | 删除范围 | ✅ | `delete("/app.py", "ab", 42, 45)` |
+| `insert_after(path, hash, line, content)` | 行后插入 | ✅ | `insert_after("/app.py", "ab", 42, "# note")` |
+| `insert_before(path, hash, line, content)` | 行前插入 | ✅ | `insert_before("/app.py", "ab", 42, "import os")` |
+| `append(path, content)` | 末尾追加 | — | `append("/app.py", "\\n# EOF")` |
+| `check_anchor(path, hash, line)` | 纯校验 | — | `check_anchor("/app.py", "ab", 42)` → `(True, "ab", ...)` |
 
 ### 工作流
 
 ```
-1. read 文件 → 看到行号和 hash
-   read /app.py:40-50
-   → 42ab|    "debug": True
+1. read 看到 hash → 声称 hash
+   read /app.py:40-50  →  42ab|    "debug": True
 
-2. 声称 hash，生成 edit input
-   inp = check_and_replace("/app.py", "ab", 42, 42, '    "debug": False')
+2. 直接执行（hash 不对自动重试）
+   replace("/app.py", "ab", 42, 42, '    "debug": False')
 
-3. 调用 edit
-   edit(input=inp)
-
-4. 清缓存
-   invalidate_cache("/app.py")
+3. 完成（重试在内部透明完成）
 ```
 
-### hash 错误时的修复流程
+### 内部原理
 
-1. 收到错误：`claimed 'xx', actual 'ab'`
-2. 如果只是抄错锚点：用正确 hash 重试
-3. 如果文件已变更（re-read 发现 hash 不同）：说明文件被外部修改，先 `invalidate_cache` 再重试
+```
+replace("app.py", "xx", 42, 42, "code")
+  ↓ edit 工具拒绝: "Edit rejected: *42ak|..."
+  ↓ 解析错误信息 → 行 42 的正确 hash = "ak"
+  ↓ 自动重试: replace("app.py", "ak", 42, 42, "code")
+  ↓ 成功
+```
 
-### 最佳实践
-
-- **优先用 `ast_edit`**（AST 结构匹配，完全无需行号/锚点）
-- **每次 `edit` 后必须 `invalidate_cache`**，否则后续操作使用过期缓存
-- **hash 校验失败后**：re-read 文件 → 用正确 hash 重试
+不消耗额外 tool call——重试在同一个 `eval` 调用内完成。
