@@ -18,7 +18,6 @@ edit_helper — 锚点校验 + edit input 构造。
 """
 
 import re
-from typing import Optional
 
 _ANCHOR_RE = re.compile(r"^(\d+)([a-z0-9]{2})\|(.*)$")
 
@@ -159,15 +158,9 @@ def check_anchor(path: str, claimed_hash: str, line: int) -> tuple[bool, str, st
     return (claimed_hash == actual, actual, content)
 
 
-# ---- 便捷校验（不读文件，用缓存） ----
+def invalidate_cache(path=None):
+    """（无操作）当前版本每次调用都读文件，无需手动清缓存。
 
-# 缓存设计：一次会话中多次对同一文件操作时，避免反复 read。
-# 但缓存只在同一轮内有效；文件被 edit 后必须手动 invalidate。
-_anchor_cache: dict[str, dict[int, str]] = {}
-
-def invalidate_cache(path: Optional[str] = None) -> None:
-    """清除锚点缓存。每次 edit 后必须调用。"""
-    if path is None:
-        _anchor_cache.clear()
-    else:
-        _anchor_cache.pop(path, None)
+    保留此函数仅为向前兼容旧工作流。实际可以安全忽略。
+    """
+    pass
