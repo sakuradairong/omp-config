@@ -232,32 +232,24 @@ OMP 已通过 hooks 自动处理此规则（`opencode-deepseek-cot.ts`），但�
 
 ---
 
-## 7. Edit 工具锚点（Hash Anchor）优化
+## 7. Edit 工具锚点（Hash Anchor）
 
-### 已知问题
+### 问题
 
 `edit` 工具的锚点格式为 `行号+2字节hash`（如 `42ab`）。hash 是随机 2 字节内容指纹，LLM 无法可靠复现。
 
-**Hash 错误通常是"模型没读文件"导致的，不是"hash 抄错了"。**
-
-### 方案：try_replace / try_insert_after / 等
-
-helper 函数封装了 edit 调用，**从不抛出异常**，总是返回结构化 dict：
-
-- **status=ok**: 编辑成功
-- **status=rejected**: 编辑被拒绝，返回正确 hash、该行实际内容、文件上下文
-- **status=error**: 非预期错误
+### 方案：强制 read → 自动提取 hash
 
 ```python
-result = try_replace("/app.py", "ab", 42, 42, '    "debug": False')
-if result["status"] == "ok":
-    # 编辑成功
-elif result["status"] == "rejected":
-    # result["correct_hash"]     → 正确的 hash
-    # result["actual_content"]   → 该行实际内容（模型检查自己是否操作错了行）
-    # result["file_context"]     → 当前文件锚点行（模型 re-read 无需再调 read）
-    # result["was_mismatch"]     → 是否是该行 hash 不匹配
+# 1. READ（必须）
+lines = tool.read({"path": "/app.py:42-42"})
+# → 42ab|    "debug": True
+
+# 2. EDIT（hash 从 lines 自动提取）
+r = edit_line(lines, "/app.py", 42, '    "debug": False')
 ```
+
+**必须先 read 才能 edit。** hash 从 read 输出中机械提取，模型不接触随机字符。没有 read 输出就报错。伪造 read 输出则 edit 工具乐观锁拒绝。
 
 ### 加载
 
@@ -265,54 +257,29 @@ elif result["status"] == "rejected":
 exec(tool.read({"path": "skill://deepseek-tool-calling/edit_helper.py"})["text"])
 ```
 
-### 函数速查
+### 函数
 
-| 函数 | 作用 | 返回 status |
+| 函数 | 作用 | 需先 read |
 |---|---|---|
-| `try_replace(path, hash, s, e, content)` | 替换范围 | ok / rejected / error |
-| `try_delete(path, hash, s, e)` | 删除范围 | ok / rejected / error |
-| `try_insert_after(path, hash, line, content)` | 行后插入 | ok / rejected / error |
-| `try_insert_before(path, hash, line, content)` | 行前插入 | ok / rejected / error |
-| `try_append(path, content)` | 末尾追加 | ok / error |
-| `check_anchor(path, hash, line)` | 纯校验 | 返回 `(bool, hash, content)` |
+| `edit_line(read_output, path, line, content)` | 替换单行 | ✅ |
+| `edit_range(read_output, path, s, e, content)` | 替换范围 | ✅ |
+| `insert_after(read_output, path, line, content)` | 行后插入 | ✅ |
+| `insert_before(read_output, path, line, content)` | 行前插入 | ✅ |
+| `append(path, content)` | 末尾追加 | ❌ |
+| `check_anchor(path, hash, line)` | 纯校验 | ❌ |
 
-### 推荐工作流：先 read，再 edit（hash 自动提取）
+### 返回值
 
-```python
-# 1. READ（必须）
-lines = tool.read({"path": "/app.py:42-42"})
+| status | 含义 | 附带字段 |
+|---|---|---|
+| `ok` | 编辑成功 | `details` |
+| `rejected` | hash 不匹配或行号错误 | `correct_hash`, `actual_content`, `file_context`, `was_mismatch` |
+| `error` | 非预期错误 | `message` |
 
-# 2. EDIT（hash 从 read 输出机械提取）
-r = edit_line(lines, "/app.py", 42, '    "debug": False')
-```
-
-**必须先 read 才能 edit**——edit_line / edit_range / insert_after_line / insert_before_line 从 read 输出中提取 hash。没有 read 输出就报错。
-
-| 函数 | 作用 |
-|---|---|
-| `edit_line(read_output, path, line, content)` | 替换单行 |
-| `edit_range(read_output, path, s, e, content)` | 替换范围 |
-| `insert_after_line(read_output, path, line, content)` | 行后插入 |
-| `insert_before_line(read_output, path, line, content)` | 行前插入 |
-
-编辑失败时的返回值：
 ```python
 {"status": "rejected",
- "correct_hash": "xy",         # 正确的 hash
- "actual_content": 'CONFIG = {', # 该行实际内容
- "file_context": "*4xy|...",    # 文件上下文锚点行
+ "correct_hash": "xy",
+ "actual_content": '    "name": "myapp",',  # ← 模型看到实际内容
+ "file_context": "*4xy|...",
  "was_mismatch": True}
 ```
-
-### 低层 API：手动声称 hash
-
-当模型确认 hash（例如刚 read 过）时，也可直接声称：
-
-| 函数 | 作用 | 返回 |
-|---|---|---|
-| `try_replace(path, hash, s, e, content)` | 替换范围 | ok / rejected / error |
-| `try_delete(path, hash, s, e)` | 删除范围 | ok / rejected / error |
-| `try_insert_after(path, hash, line, content)` | 行后插入 | ok / rejected / error |
-| `try_insert_before(path, hash, line, content)` | 行前插入 | ok / rejected / error |
-| `try_append(path, content)` | 末尾追加 | ok / error |
-| `check_anchor(path, hash, line)` | 纯校验 | (bool, hash, content) |
