@@ -276,18 +276,43 @@ exec(tool.read({"path": "skill://deepseek-tool-calling/edit_helper.py"})["text"]
 | `try_append(path, content)` | 末尾追加 | ok / error |
 | `check_anchor(path, hash, line)` | 纯校验 | 返回 `(bool, hash, content)` |
 
-### 工作流
+### 推荐工作流：先 read，再 edit（hash 自动提取）
 
+```python
+# 1. READ（必须）
+lines = tool.read({"path": "/app.py:42-42"})
+
+# 2. EDIT（hash 从 read 输出机械提取）
+r = edit_line(lines, "/app.py", 42, '    "debug": False')
 ```
-model: 以为自己知道 L42 是 "debug": True
-model: try_replace("app.py", "ab", 42, ..., '    "debug": False')
-       ↓
-edit 工具: hash=ab 不匹配 → 拒绝
-       ↓
-返回: { status: "rejected",
-        correct_hash: "xy",
-        actual_content: '    "name": "myapp",' }
-       ↓
-model: "原来 L42 是 name 不是 debug，我看错了"
-model: read → 确认 → 重新编辑正确的行
+
+**必须先 read 才能 edit**——edit_line / edit_range / insert_after_line / insert_before_line 从 read 输出中提取 hash。没有 read 输出就报错。
+
+| 函数 | 作用 |
+|---|---|
+| `edit_line(read_output, path, line, content)` | 替换单行 |
+| `edit_range(read_output, path, s, e, content)` | 替换范围 |
+| `insert_after_line(read_output, path, line, content)` | 行后插入 |
+| `insert_before_line(read_output, path, line, content)` | 行前插入 |
+
+编辑失败时的返回值：
+```python
+{"status": "rejected",
+ "correct_hash": "xy",         # 正确的 hash
+ "actual_content": 'CONFIG = {', # 该行实际内容
+ "file_context": "*4xy|...",    # 文件上下文锚点行
+ "was_mismatch": True}
 ```
+
+### 低层 API：手动声称 hash
+
+当模型确认 hash（例如刚 read 过）时，也可直接声称：
+
+| 函数 | 作用 | 返回 |
+|---|---|---|
+| `try_replace(path, hash, s, e, content)` | 替换范围 | ok / rejected / error |
+| `try_delete(path, hash, s, e)` | 删除范围 | ok / rejected / error |
+| `try_insert_after(path, hash, line, content)` | 行后插入 | ok / rejected / error |
+| `try_insert_before(path, hash, line, content)` | 行前插入 | ok / rejected / error |
+| `try_append(path, content)` | 末尾追加 | ok / error |
+| `check_anchor(path, hash, line)` | 纯校验 | (bool, hash, content) |

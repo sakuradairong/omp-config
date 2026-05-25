@@ -118,12 +118,13 @@ def _do_try(path: str, op: str, anchor_spec: str, content: str = "") -> dict:
 
 # ---- 公共 API ----
 
-def try_replace(path: str, claimed_hash: str, start_line: int, end_line: int, content: str = "") -> dict:
+def try_replace(path: str, claimed_hash: str, start_line: int, end_line: int, content: str = "", end_hash: Optional[str] = None) -> dict:
     """尝试替换范围内容。返回结构化结果。"""
     if start_line == end_line:
         spec = f"{start_line}{claimed_hash}"
     else:
-        spec = f"{start_line}{claimed_hash}..{end_line}{claimed_hash}"
+        eh = end_hash or claimed_hash
+        spec = f"{start_line}{claimed_hash}..{end_line}{eh}"
     return _do_try(path, _REPLACE_OP, spec, content)
 
 
@@ -160,3 +161,53 @@ def check_anchor(path: str, claimed_hash: str, line: int) -> tuple:
             content = m.group(3)
             return (claimed_hash == actual, actual, content)
     raise RuntimeError(f"Cannot find anchor for '{path}' line {line} in read output.")
+
+# ---- 强制 read 的 edit API ----
+# 模型必须先 read，拿到锚点行文本，再传入这些函数。
+# hash 从 read 输出中机械提取，模型不接触随机字符。
+
+_ANCHOR_RE = re.compile(r"^(\d+)([a-z0-9]{2})\|")
+
+
+def _extract_hash_from_read(read_output: str, line: int) -> str:
+    """从 read 工具的输出中提取指定行的 hash。"""
+    if isinstance(read_output, dict):
+        read_output = read_output.get("text", "")
+    for l in read_output.splitlines():
+        m = _ANCHOR_RE.match(l)
+        if m and int(m.group(1)) == line:
+            return m.group(2)
+    raise ValueError(
+        f"Line {line} not found in read output. "
+        f"Read the file first with: read path:{line}-{line}"
+    )
+
+
+def edit_line(read_output, path: str, line: int, content: str) -> dict:
+    """替换单行。hash 从 read_output 中提取，模型不需要提供。
+
+    必须先 read：
+        out = read(\"app.py:42-42\")
+        edit_line(out, \"app.py\", 42, '    \"debug\": False')
+    """
+    h = _extract_hash_from_read(read_output, line)
+    return try_replace(path, h, line, line, content)
+
+
+def edit_range(read_output, path: str, start_line: int, end_line: int, content: str) -> dict:
+    """替换范围。hash 从 read_output 中提取。"""
+    start_h = _extract_hash_from_read(read_output, start_line)
+    end_h = _extract_hash_from_read(read_output, end_line)
+    return try_replace(path, start_h, start_line, end_line, content, end_hash=end_h)
+
+
+def insert_after_line(read_output, path: str, line: int, content: str) -> dict:
+    """行后插入。hash 从 read_output 中提取。"""
+    h = _extract_hash_from_read(read_output, line)
+    return try_insert_after(path, h, line, content)
+
+
+def insert_before_line(read_output, path: str, line: int, content: str) -> dict:
+    """行前插入。hash 从 read_output 中提取。"""
+    h = _extract_hash_from_read(read_output, line)
+    return try_insert_before(path, h, line, content)
