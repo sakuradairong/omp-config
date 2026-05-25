@@ -258,11 +258,12 @@ exec(tool.read({"path": "skill://deepseek-tool-calling/edit_helper.py"})["text"]
 ```
 
 ### 函数
-
 | 函数 | 作用 | 需先 read |
 |---|---|---|
 | `edit_line(read_output, path, line, content)` | 替换单行 | ✅ |
 | `edit_range(read_output, path, s, e, content)` | 替换范围 | ✅ |
+| `delete_line(read_output, path, line)` | 删除单行 | ✅ |
+| `delete_range(read_output, path, s, e)` | 删除范围 | ✅ |
 | `insert_after(read_output, path, line, content)` | 行后插入 | ✅ |
 | `insert_before(read_output, path, line, content)` | 行前插入 | ✅ |
 | `append(path, content)` | 末尾追加 | ❌ |
@@ -273,13 +274,16 @@ exec(tool.read({"path": "skill://deepseek-tool-calling/edit_helper.py"})["text"]
 | status | 含义 | 附带字段 |
 |---|---|---|
 | `ok` | 编辑成功 | `details` |
-| `rejected` | hash 不匹配或行号错误 | `correct_hash`, `actual_content`, `file_context`, `was_mismatch` |
+| `rejected` | hash 不匹配 | `correct_hash`, `actual_content`, `mismatches[]`, `file_context` |
 | `error` | 非预期错误 | `message` |
 
 ```python
 {"status": "rejected",
- "correct_hash": "xy",
- "actual_content": '    "name": "myapp",',  # ← 模型看到实际内容
+ "correct_hash": "xy",          # 目标行的正确 hash
+ "actual_content": 'CONFIG = {', # 目标行实际内容
+ "mismatches": [                 # 所有 hash 不匹配的行
+   {"line": 4, "correct_hash": "xy", "actual_content": "CONFIG = {"}
+ ],
  "file_context": "*4xy|...",
  "was_mismatch": True}
 ```

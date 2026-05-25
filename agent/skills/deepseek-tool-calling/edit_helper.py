@@ -18,7 +18,6 @@ edit_helper — 强制先 read 再 edit。
 """
 
 import re
-from typing import Optional
 
 _EDIT_HEADER = chr(0xA7)    # §
 _REPLACE_OP = chr(0x2254)   # ≔
@@ -49,19 +48,39 @@ def _extract_hash(read_output, line: int) -> str:
     raise ValueError(f"Line {line} not found in read output. Read the file with: read path:{line}-{line}")
 
 
-def _parse_rejection(error: str, target_line: int) -> Optional[dict]:
-    """从 edit 拒绝信息解析正确 hash 和实际内容。"""
+def _parse_rejection(error: str, target_line: int = None) -> tuple:
+    """解析 edit 拒绝信息。
+
+    Returns:
+        (target_info, all_mismatches)
+        target_info: 目标行的信息 dict，或 None
+        all_mismatches: 所有 * 标记行的 [{line, correct_hash, actual_content}]
+    """
+    target_info = None
+    all_mismatches = []
+
     for line in error.splitlines():
         m = _ANCHOR_LINE_RE.match(line)
-        if m and int(m.group(2)) == target_line:
-            pipe_idx = line.index("|")
-            return {
-                "correct_hash": m.group(3),
-                "actual_content": line[pipe_idx + 1:] if pipe_idx >= 0 else "",
-                "line": target_line,
-                "was_mismatch": m.group(1) == "*",
+        if not m:
+            continue
+        ln = int(m.group(2))
+        h = m.group(3)
+        pipe_idx = line.index("|")
+        content = line[pipe_idx + 1:] if pipe_idx >= 0 else ""
+        is_marked = m.group(1) == "*"
+
+        if is_marked:
+            all_mismatches.append({"line": ln, "correct_hash": h, "actual_content": content})
+
+        if target_line is not None and ln == target_line:
+            target_info = {
+                "correct_hash": h,
+                "actual_content": content,
+                "line": ln,
+                "was_mismatch": is_marked,
             }
-    return None
+
+    return target_info, all_mismatches
 
 
 def _extract_context(error: str) -> str:
@@ -86,21 +105,22 @@ def _do_edit(path: str, op: str, anchor_spec: str, content: str = "") -> dict:
         msg = str(e)
         m = re.match(r"^(\d+)", anchor_spec.split("..")[0])
         target = int(m.group(1)) if m else None
-        rejection = _parse_rejection(msg, target) if target else None
+        target_info, mismatches = _parse_rejection(msg, target)
         return {
             "status": "rejected",
             "message": msg,
             "target_line": target,
-            "correct_hash": rejection["correct_hash"] if rejection else None,
-            "actual_content": rejection["actual_content"] if rejection else None,
-            "was_mismatch": rejection["was_mismatch"] if rejection else False,
+            "correct_hash": target_info["correct_hash"] if target_info else None,
+            "actual_content": target_info["actual_content"] if target_info else None,
+            "was_mismatch": target_info["was_mismatch"] if target_info else False,
+            "mismatches": mismatches,  # 所有 hash 不匹配的行
             "file_context": _extract_context(msg),
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 
-# ---- 公共 API：必须先 read ----
+
 
 def edit_line(read_output, path: str, line: int, content: str) -> dict:
     """替换单行。hash 从 read_output 提取。必须先 read。"""
@@ -113,6 +133,15 @@ def edit_range(read_output, path: str, start_line: int, end_line: int, content: 
     sh = _extract_hash(read_output, start_line)
     eh = _extract_hash(read_output, end_line)
     return _do_edit(path, _REPLACE_OP, f"{start_line}{sh}..{end_line}{eh}", content)
+def delete_line(read_output, path: str, line: int) -> dict:
+    """删除单行。hash 从 read_output 提取。"""
+    return edit_line(read_output, path, line, "")
+
+
+def delete_range(read_output, path: str, start_line: int, end_line: int) -> dict:
+    """删除范围。hash 从 read_output 提取。"""
+    return edit_range(read_output, path, start_line, end_line, "")
+
 
 
 def insert_after(read_output, path: str, line: int, content: str) -> dict:
