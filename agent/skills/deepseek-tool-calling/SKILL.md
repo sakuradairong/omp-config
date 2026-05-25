@@ -238,15 +238,26 @@ OMP 已通过 hooks 自动处理此规则（`opencode-deepseek-cot.ts`），但�
 
 `edit` 工具的锚点格式为 `行号+2字节hash`（如 `42ab`）。hash 是随机 2 字节内容指纹，LLM 无法可靠复现。
 
-### 方案：replace/delete/insert_after/insert_before/append
+**Hash 错误通常是"模型没读文件"导致的，不是"hash 抄错了"。**
 
-helper 函数封装了 edit 调用，**hash 错误时自动从 edit 工具的错误信息中提取正确 hash 并重试**。
+### 方案：try_replace / try_insert_after / 等
 
-无需：
-- pre-read 文件
-- 手动校验 hash
-- `invalidate_cache`
-- try/except
+helper 函数封装了 edit 调用，**从不抛出异常**，总是返回结构化 dict：
+
+- **status=ok**: 编辑成功
+- **status=rejected**: 编辑被拒绝，返回正确 hash、该行实际内容、文件上下文
+- **status=error**: 非预期错误
+
+```python
+result = try_replace("/app.py", "ab", 42, 42, '    "debug": False')
+if result["status"] == "ok":
+    # 编辑成功
+elif result["status"] == "rejected":
+    # result["correct_hash"]     → 正确的 hash
+    # result["actual_content"]   → 该行实际内容（模型检查自己是否操作错了行）
+    # result["file_context"]     → 当前文件锚点行（模型 re-read 无需再调 read）
+    # result["was_mismatch"]     → 是否是该行 hash 不匹配
+```
 
 ### 加载
 
@@ -256,35 +267,27 @@ exec(tool.read({"path": "skill://deepseek-tool-calling/edit_helper.py"})["text"]
 
 ### 函数速查
 
-| 函数 | 作用 | 错误自动重试 | 示例 |
-|---|---|---|---|
-| `replace(path, hash, s, e, content)` | 替换范围 | ✅ | `replace("/app.py", "ab", 42, 42, "code")` |
-| `delete(path, hash, s, e)` | 删除范围 | ✅ | `delete("/app.py", "ab", 42, 45)` |
-| `insert_after(path, hash, line, content)` | 行后插入 | ✅ | `insert_after("/app.py", "ab", 42, "# note")` |
-| `insert_before(path, hash, line, content)` | 行前插入 | ✅ | `insert_before("/app.py", "ab", 42, "import os")` |
-| `append(path, content)` | 末尾追加 | — | `append("/app.py", "\\n# EOF")` |
-| `check_anchor(path, hash, line)` | 纯校验 | — | `check_anchor("/app.py", "ab", 42)` → `(True, "ab", ...)` |
+| 函数 | 作用 | 返回 status |
+|---|---|---|
+| `try_replace(path, hash, s, e, content)` | 替换范围 | ok / rejected / error |
+| `try_delete(path, hash, s, e)` | 删除范围 | ok / rejected / error |
+| `try_insert_after(path, hash, line, content)` | 行后插入 | ok / rejected / error |
+| `try_insert_before(path, hash, line, content)` | 行前插入 | ok / rejected / error |
+| `try_append(path, content)` | 末尾追加 | ok / error |
+| `check_anchor(path, hash, line)` | 纯校验 | 返回 `(bool, hash, content)` |
 
 ### 工作流
 
 ```
-1. read 看到 hash → 声称 hash
-   read /app.py:40-50  →  42ab|    "debug": True
-
-2. 直接执行（hash 不对自动重试）
-   replace("/app.py", "ab", 42, 42, '    "debug": False')
-
-3. 完成（重试在内部透明完成）
+model: 以为自己知道 L42 是 "debug": True
+model: try_replace("app.py", "ab", 42, ..., '    "debug": False')
+       ↓
+edit 工具: hash=ab 不匹配 → 拒绝
+       ↓
+返回: { status: "rejected",
+        correct_hash: "xy",
+        actual_content: '    "name": "myapp",' }
+       ↓
+model: "原来 L42 是 name 不是 debug，我看错了"
+model: read → 确认 → 重新编辑正确的行
 ```
-
-### 内部原理
-
-```
-replace("app.py", "xx", 42, 42, "code")
-  ↓ edit 工具拒绝: "Edit rejected: *42ak|..."
-  ↓ 解析错误信息 → 行 42 的正确 hash = "ak"
-  ↓ 自动重试: replace("app.py", "ak", 42, 42, "code")
-  ↓ 成功
-```
-
-不消耗额外 tool call——重试在同一个 `eval` 调用内完成。
