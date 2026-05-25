@@ -103,6 +103,8 @@ def _do_edit(path: str, op: str, anchor_spec: str, content: str = "") -> dict:
         return {"status": "ok", "details": result.get("details", result) if isinstance(result, dict) else result}
     except RuntimeError as e:
         msg = str(e)
+        if not msg.startswith("Edit rejected"):
+            return {"status": "error", "message": msg}
         m = re.match(r"^(\d+)", anchor_spec.split("..")[0])
         target = int(m.group(1)) if m else None
         target_info, mismatches = _parse_rejection(msg, target)
@@ -113,13 +115,11 @@ def _do_edit(path: str, op: str, anchor_spec: str, content: str = "") -> dict:
             "correct_hash": target_info["correct_hash"] if target_info else None,
             "actual_content": target_info["actual_content"] if target_info else None,
             "was_mismatch": target_info["was_mismatch"] if target_info else False,
-            "mismatches": mismatches,  # 所有 hash 不匹配的行
+            "mismatches": mismatches,
             "file_context": _extract_context(msg),
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
-
-
 
 
 def edit_line(read_output, path: str, line: int, content: str) -> dict:
@@ -133,6 +133,8 @@ def edit_range(read_output, path: str, start_line: int, end_line: int, content: 
     sh = _extract_hash(read_output, start_line)
     eh = _extract_hash(read_output, end_line)
     return _do_edit(path, _REPLACE_OP, f"{start_line}{sh}..{end_line}{eh}", content)
+
+
 def delete_line(read_output, path: str, line: int) -> dict:
     """删除单行。hash 从 read_output 提取。"""
     return edit_line(read_output, path, line, "")
@@ -141,7 +143,6 @@ def delete_line(read_output, path: str, line: int) -> dict:
 def delete_range(read_output, path: str, start_line: int, end_line: int) -> dict:
     """删除范围。hash 从 read_output 提取。"""
     return edit_range(read_output, path, start_line, end_line, "")
-
 
 
 def insert_after(read_output, path: str, line: int, content: str) -> dict:
