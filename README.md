@@ -9,88 +9,144 @@
 ```
 ~/.omp/
 ├── CLAUDE.md                                   # Agent 行为指令 + 全局工作流
-├── skills/
-│   └── plan-execute-review-commit.md           # 自定义 skill: 4 阶段工作流
+├── skills/                                     # 全局技能（17个 superpowers 技能）
+│   ├── brainstorming/                          # 结构化构思
+│   ├── writing-plans/                          # 分步实施计划
+│   ├── test-driven-development/               # TDD
+│   ├── systematic-debugging/                  # 系统化调试
+│   ├── verification-before-completion/        # 完成前验证
+│   ├── ...（共 17 个）
 └── agent/
     ├── config.yml                              # 主配置（角色/压缩/模型/扩展）
     ├── models.yml                              # 模型定义 + DeepSeek V4 覆盖
-    ├── mcp.json                                # MCP 服务（deepwiki + github）
+    ├── mcp.json                                # MCP 服务（gitnexus）
     ├── .env.example                            # 环境变量模板
-    ├── .gitignore                              # 版本控制忽略规则
+    ├── .gitignore
     ├── agents/
-    │   └── TestGo.md                           # Go 测试子代理
+    │   ├── librarian.md                        # 库搜索子代理
+    │   ├── plan.md                             # 架构规划子代理
+    │   ├── reviewer.md                         # 代码审查子代理
+    │   ├── explore.md                          # 代码探索子代理
+    │   ├── designer.md                         # 设计/UI 子代理
+    │   ├── task.md                             # 通用子代理
+    │   └── quick_task.md                       # 轻量子代理
     ├── hooks/
     │   └── pre/
     │       ├── guard-destructive.ts            # 安全守卫：拦截危险 bash 命令
-    │       ├── opencode-deepseek-cot.ts        # DeepSeek 思维链兼容 + 参数修复
-    │       └── opencode-deepseek-tool-repair.ts # DeepSeek 工具调用修复
-    └── skills/
-        ├── deepseek-tool-calling/              # DeepSeek 工具调用最佳实践
-        │   ├── SKILL.md                        # 技能文档（含 §7 Hash Anchor 优化）
-        │   ├── edit_helper.py                  # edit 工具 hash anchor 自动纠错模块
-        │   ├── DESIGN.md                       # 设计说明
-        │   ├── COMPLETE_REPORT.md              # 完整设计报告
-        │   ├── TEST_REPORT_v2.md               # 第二轮测试报告
-        │   ├── TOCTOU_REPORT.md                # 并发冲突测试报告
-        │   └── V3_TEST_REPORT.md               # V3 循环测试报告
-        ├── go-testing/                         # Go 测试规范
+    │       ├── opencode-deepseek-cot.ts        # DeepSeek reasoning_content 补全
+    │       ├── opencode-deepseek-tool-repair.ts# DeepSeek 工具参数修复（15 种模式）
+    │       ├── opencode-deepseek-edit-anchor.ts# edit 锚点格式验证
+    │       └── opencode-deepseek-tool-result.ts# 工具结果格式化/非空保证
+    └── skills/                                 # Agent 技能（12 个）
+        ├── deepseek-tool-calling/              # DeepSeek V4 工具调用最佳实践
         ├── conventional-commits/               # Conventional Commits 规范
-        └── docker-compose/                     # Docker Compose V2 专家
+        ├── docker-compose/                     # Docker Compose V2 最佳实践
+        ├── go-testing/                         # Go 测试规范
+        ├── caveman/                            # 极简通信模式
+        ├── diagnose/                           # 诊断循环
+        ├── grill-with-docs/                    # 文档对质
+        ├── handoff/                            # 交接文档生成
+        ├── improve-codebase-architecture/      # 架构深化
+        ├── prototype/                          # 快速原型
+        ├── tdd/                                # TDD（red-green-refactor）
+        └── zoom-out/                           # 代码全景理解
 ```
 
 ## 要点
 
 ### 模型配置
-- **主提供方**: OpenCode Go API（`opencode-go`，通过 `opencode.ai` 代理）
-- **默认模型**: `deepseek-v4-pro`（推理模式 xhigh）
-- **内置覆盖**: 补充了 OpenCode Go API 缺失的 reasoning/compat 标志
-- **扩展提供方**: DeepSeek 直连、自托管 OpenAI、NekoCode（Claude/GPT 代理）—— 按需取消注释
+
+- **主提供方**: OpenCode Go API（`opencode-go`，通过 `opencode.ai/zen/go/v1` 代理）
+- **默认模型**: `deepseek-v4-flash`（推理模式 xhigh）
+- **规划/慢速**: `deepseek-v4-pro`（xhigh）
+- **视觉模型**: `qwen3.5-plus`
+- **模型覆盖**: `models.yml` 补充了 OpenCode Go API 动态发现缺失的 reasoning/compat 标志（`reasoningContentField`、`requiresReasoningContentForToolCalls`、`supportsToolChoice` 等）
+- **直连备选**: 内置 `deepseek` provider 直连 DeepSeek API 的完整覆盖
 
 ### 模型角色
 
 | 角色 | 模型 | 推理 |
 |------|------|------|
-| default | deepseek-v4-pro | xhigh |
-| smol / commit / quick_task | deepseek-v4-flash | off |
+| default | deepseek-v4-flash | xhigh |
+| plan | deepseek-v4-pro | xhigh |
 | slow | deepseek-v4-pro | xhigh |
-| designer / task / explore / librarian | deepseek-v4-flash | xhigh |
-| plan | deepseek-v4-pro | medium |
-| reviewer | deepseek-v4-pro | low |
-| oracle | deepseek-v4-pro | xhigh |
-| vision | qwen3.5-plus | — |
+| designer | deepseek-v4-flash | xhigh |
+| smol | deepseek-v4-flash | xhigh |
+| vision | qwen3.5-plus | high |
 
 ### Hooks（钩子）
 
-| Hook | 功能 |
-|------|------|
-| `guard-destructive` | 拦截 `rm -rf /`、`dd`、`mkfs` 等危险命令 |
-| `opencode-deepseek-cot` | 补全历史消息中缺失的 `reasoning_content`，修复工具调用参数 |
-| `opencode-deepseek-tool-repair` | 修复 DeepSeek 常见 JSON 格式错误（双重编码、数组/可选/null 字段） |
+所有钩子使用 `@oh-my-pi/pi-coding-agent/extensibility/hooks` API，兼容 OMP 15.3.x。
+
+| Hook | 事件 | 功能 |
+|------|------|------|
+| `guard-destructive` | `tool_call` | 拦截 `rm -rf /`、`dd`、`mkfs` 等危险命令 |
+| `opencode-deepseek-cot` | `context` | 补全历史消息中缺失的 `reasoning_content` |
+| `opencode-deepseek-tool-repair` | `context` | 修复 DeepSeek 常见 JSON 格式错误（双重编码、数组/null/可选字段） |
+| `opencode-deepseek-edit-anchor` | `tool_call` | 验证 edit 锚点 `LINE+HASH` 格式正确性 |
+| `opencode-deepseek-tool-result` | `tool_result` | 工具结果格式化（非空保证、ANSI 清理、摘要行） |
 
 ### Skills
 
-| Skill | 来源 | 说明 |
-|-------|------|------|
-| plan-execute-review-commit | 自定义 | Plan → Execute → Review → Commit 四阶段工作流 |
-| deepseek-tool-calling | 自定义 | 工具调用格式指南 + `edit_helper.py` hash anchor 自动纠错 |
-| go-testing | 移植 | Go 测试规范（testify + 表驱动） |
-| conventional-commits | 移植 | 规范化 commit message |
-| docker-compose | 移植 | Docker Compose V2 最佳实践 |
+#### 全局技能（`~/.omp/skills/`）
 
-#### edit_helper
+Superpowers 工作流技能集，17 个 `<name>/SKILL.md` 格式，通过 `customDirectories: [/root/.omp/skills]` 加载。
 
-`deepseek-tool-calling` 目录下的 `edit_helper.py` 解决 `edit` 工具 hash anchor（行号+随机 2 字节内容指纹）无法被 LLM 可靠复现的问题。
+| 技能 | 用途 |
+|------|------|
+| `using-superpowers` | 入口：如何发现和使用技能 |
+| `brainstorming` | 结构化工期，always-apply |
+| `writing-plans` | 编写分步实施计划 |
+| `subagent-driven-development` | 子代理驱动执行 |
+| `executing-plans` | 单会话计划执行 |
+| `systematic-debugging` | 四阶段根因调试 |
+| `test-driven-development` | RED-GREEN-REFACTOR |
+| `verification-before-completion` | 基于证据的完成验证 |
+| `using-git-worktrees` | 隔离工作区管理 |
+| `dispatching-parallel-agents` | 并行任务分发 |
+| `requesting-code-review` | 代码审查请求 |
+| `receiving-code-review` | 审查反馈处理 |
+| `finishing-a-development-branch` | 分支完结决策 |
+| `writing-skills` | 技能编写指南 |
+| `spike` | 快速技术验证 |
+| `plan-execute-review-commit` | 四阶段工作流 |
+| `astrbot-plugin-development` | AstrBot 插件开发参考 |
 
-核心原理：直接执行 edit，失败时从 edit 工具的拒绝消息中自动提取正确 hash 并重试。重试在同一 eval 调用内透明完成，无需 pre-read 或 invalidate_cache。
+#### Agent 技能（`~/.omp/agent/skills/`）
 
-```python
-exec(tool.read({"path": "skill://deepseek-tool-calling/edit_helper.py"})["text"])
+原生 provider 发现，支持 `hide: true` 前置元数据（技能仍可通过 `skill://` 访问，但不显示在系统提示技能列表）。
 
-replace("/app.py", "ab", 42, 42, '    "debug": False')
-# hash 错误 → 自动纠正重试
+| 技能 | hide | 说明 |
+|------|------|------|
+| `deepseek-tool-calling` | ✅ | DeepSeek V4 工具调用最佳实践（always-apply） |
+| `caveman` | ✅ | 极简通信模式（通过 /caveman 触发） |
+| `handoff` | ✅ | 交接文档生成（通过 /handoff 触发） |
+| `diagnose` | — | 系统化诊断循环 |
+| `grill-with-docs` | — | 文档对质以完善设计 |
+| `improve-codebase-architecture` | — | 架构深化建议 |
+| `prototype` | — | 快速原型设计 |
+| `tdd` | — | 测试驱动开发 |
+| `zoom-out` | — | 代码全景理解 |
+| `conventional-commits` | — | Conventional Commits 规范 |
+| `docker-compose` | — | Docker Compose V2 最佳实践 |
+| `go-testing` | — | Go 测试规范（testify + 表驱动） |
+
+### 编辑工作流
+
+OMP 15.3.x 原生 hashline 编辑系统，无需辅助脚本：
+
+```
+read <file>:<range>        # 获取 §PATH 头和 LINEID|content
+edit input="§<file>
+   ≔ <line><hash>          # 替换：行号+哈希锚点
+     <new content>"
+   « <line><hash>          # 行前插入
+     <new line>"
+   » <line><hash>          # 行后插入
+     <new line>"
 ```
 
-累计测试：6 种语言，106 次操作，77 次 hash 纠正，0 次失败。
+原生 stale-anchor recovery 通过 read 缓存 3-way merge 自动恢复哈希不匹配。
 
 ## 使用方法
 
