@@ -4,6 +4,9 @@ description: |
   DeepSeek 模型工具调用最佳实践引导。
   帮助 DeepSeek V4 系列模型正确格式化工具调用参数，
   减少因 JSON 格式错误导致的调用失败。
+alwaysApply: true
+hide: true
+tags: [deepseek, tool-calling, compatibility]
 ---
 
 # DeepSeek Tool Calling Guide
@@ -53,6 +56,7 @@ DeepSeek 容易把数组字段写成单个字符串或空对象。正确的格�
 - `items` — 项目列表
 - `args` — 参数列表
 - `questions` — 问题列表（ask）
+- `cells` — eval 单元的代码列表
 
 ### 2. 可选字段（Optional Fields）
 
@@ -83,6 +87,8 @@ DeepSeek 容易把未使用的可选字段传为 `null`。这可能触发 schema
 - `env` — 环境变量（bash）
 - `description` — 描述
 - `timeout` — 超时秒数（bash, task）
+- `symbol` — LSP 符号名
+- `schema` — 子任务输出 schema
 
 ### 3. 数值字段（Number Fields）
 
@@ -169,24 +175,36 @@ Unexpected end of JSON input
 | `ast_grep` | pat, paths | paths | skip | _i |
 | `ast_edit` | ops, paths | ops, paths | - | _i |
 | `lsp` | action | - | line | file, symbol, query, timeout |
-| `eval` | input | - | - | - |
+| `eval` | cells | cells | timeout | - |
 | `task` | agent, tasks | tasks | - | context, schema |
 | `ask` | questions | questions | - | - |
 | `resolve` | action, reason | - | - | - |
 | `browser` | action | - | timeout | name, url, viewport, code, etc. |
 | `todo_write` | ops | ops | - | - |
 
-## 总结
+## 工具参数格式注意事项
 
-DeepSeek 工具调用的核心原则：
+### read 工具
+- `path` 必须是字符串，**不要**传数组
+- 如果查看文件需要指定行号范围，使用 `path: "file.ts:10-30"` 格式
+- 不要将 search 的参数（`paths`, `pattern`）传给 read
 
-1. **数组始终用 `[...]` 语法**，不要用字符串或对象
-2. **省略可选字段**，不要传 `null`
-3. **数字直接写数字**，不要加引号
-4. **参数直接传对象**，不要包字符串
-5. **枚举值用小写**（大写会自动匹配但更可靠的是小写）
+### edit 工具
+- `input` 必须是字符串（DSL 格式），**不要**传对象
+- 锚点格式：`行号+2位hash`（如 `42ab`），不要只写行号
+- 必须先 read 获取精确锚点，再构造 edit 调用
 
-遵循这些规则可以避免 90% 以上的工具调用校验错误。
+### write 工具
+- `content` 必须是字符串，**不要**传对象
+- 如果是 JSON 内容，直接用多行字符串传递
+
+### browser 工具
+- `code` 必须是字符串，**不要**传对象
+- `viewport` 必须是对象 `{width, height}`，不要传字符串
+
+### lsp 工具
+- `line` 必须是数字，不要传字符串
+- `symbol` 可选，不要传 null
 
 ## 思考模式 + 工具调用
 
@@ -219,6 +237,47 @@ OMP 已通过 hooks 自动处理此规则（`opencode-deepseek-cot.ts`），但�
 
 如果 assistant 没有进行工具调用，其 `reasoning_content` 不需要回传，API 会自动忽略。
 
+### tool_choice 限制
+
+DeepSeek V4 在启用思考模式时**不支持** `tool_choice` 参数。如果强制指定 `tool_choice`（如 `{type:"function", function:{name:"..."}}`），API 返回 400 错误。OMP 已通过 `supportsToolChoice: false` 配置自动处理。
+
+## 工具返回结果格式
+
+DeepSeek 处理工具返回结果时（OpenAI 格式），`content` 字段必须是**非空字符串**。
+
+✅ **tool result 正确格式**
+```json
+{
+  "role": "tool",
+  "tool_call_id": "call_xxx",
+  "content": "文件内容或工具输出..."
+}
+```
+
+❌ **避免空 content**
+```json
+{
+  "role": "tool",
+  "tool_call_id": "call_xxx",
+  "content": ""
+}
+```
+
+OMP 已通过 hook（`opencode-deepseek-tool-result.ts`）自动保证：
+- content 从不为空
+- 工具返回的 ANSI 转义码已清理
+- 大量输出前有摘要统计行
+
+## 优化栈概述
+
+OMP 对 DeepSeek V4 的优化分 5 层：
+
+1. **models.yml** — 模型元数据覆盖（reasoning/compat/thinking 等 10+ 字段）
+2. **COT 钩子** — `reasoning_content` 自动补全
+3. **工具修复钩子** — 工具调用参数自动清洗（JSON 解析、类型转换、字段修正）
+4. **工具调用 skill** — 系统提示注入最佳实践（本文档）
+5. **结果优化钩子** — 工具返回结果格式归一化（非空、ANSI 清理、摘要统计）
+
 ## 模型版本
 
 - **deepseek-v4-pro**: 1M 上下文，384K 最大输出，默认思考模式
@@ -229,61 +288,3 @@ OMP 已通过 hooks 自动处理此规则（`opencode-deepseek-cot.ts`），但�
 
 - **OpenAI 格式** (`openai-completions`): 完整功能支持，推荐使用
 - **Anthropic 格式** (`anthropic-messages`): 通过 `https://api.deepseek.com/anthropic`，不支持 image/document
-
----
-
-## 7. Edit 工具锚点（Hash Anchor）
-
-### 问题
-
-`edit` 工具的锚点格式为 `行号+2字节hash`（如 `42ab`）。hash 是随机 2 字节内容指纹，LLM 无法可靠复现。
-
-### 方案：强制 read → 自动提取 hash
-
-```python
-# 1. READ（必须）
-lines = tool.read({"path": "/app.py:42-42"})
-# → 42ab|    "debug": True
-
-# 2. EDIT（hash 从 lines 自动提取）
-r = edit_line(lines, "/app.py", 42, '    "debug": False')
-```
-
-**必须先 read 才能 edit。** hash 从 read 输出中机械提取，模型不接触随机字符。没有 read 输出就报错。伪造 read 输出则 edit 工具乐观锁拒绝。
-
-### 加载
-
-```python
-exec(tool.read({"path": "skill://deepseek-tool-calling/edit_helper.py"})["text"])
-```
-
-### 函数
-| 函数 | 作用 | 需先 read |
-|---|---|---|
-| `edit_line(read_output, path, line, content)` | 替换单行 | ✅ |
-| `edit_range(read_output, path, s, e, content)` | 替换范围 | ✅ |
-| `delete_line(read_output, path, line)` | 删除单行 | ✅ |
-| `delete_range(read_output, path, s, e)` | 删除范围 | ✅ |
-| `insert_after(read_output, path, line, content)` | 行后插入 | ✅ |
-| `insert_before(read_output, path, line, content)` | 行前插入 | ✅ |
-| `append(path, content)` | 末尾追加 | ❌ |
-| `check_anchor(path, hash, line)` | 纯校验 | ❌ |
-
-### 返回值
-
-| status | 含义 | 附带字段 |
-|---|---|---|
-| `ok` | 编辑成功 | `details` |
-| `rejected` | hash 不匹配 | `correct_hash`, `actual_content`, `mismatches[]`, `file_context` |
-| `error` | 非预期错误 | `message` |
-
-```python
-{"status": "rejected",
- "correct_hash": "xy",          # 目标行的正确 hash
- "actual_content": 'CONFIG = {', # 目标行实际内容
- "mismatches": [                 # 所有 hash 不匹配的行
-   {"line": 4, "correct_hash": "xy", "actual_content": "CONFIG = {"}
- ],
- "file_context": "*4xy|...",
- "was_mismatch": True}
-```
