@@ -5,13 +5,20 @@ skills:
   customDirectories: 
     - /root/.omp/skills
     - /root/.claude/skills
-modelRoles: 
-  default: opencode-go/deepseek-v4-flash:xhigh
-  plan: opencode-go/deepseek-v4-pro:xhigh
+modelRoles:
+  default: opencode-go/deepseek-v4-pro:xhigh
+  smol: opencode-go/deepseek-v4-flash:off
   slow: opencode-go/deepseek-v4-pro:xhigh
-  designer: opencode-go/deepseek-v4-flash:xhigh
-  smol: opencode-go/deepseek-v4-flash:xhigh
   vision: opencode-go/qwen3.5-plus:high
+  task: opencode-go/deepseek-v4-flash:xhigh
+  explore: opencode-go/deepseek-v4-flash:xhigh
+  plan: opencode-go/deepseek-v4-pro:medium
+  designer: opencode-go/deepseek-v4-flash:xhigh
+  commit: opencode-go/deepseek-v4-flash:off
+  reviewer: opencode-go/deepseek-v4-pro:low
+  librarian: opencode-go/deepseek-v4-flash:xhigh
+  quick_task: opencode-go/deepseek-v4-flash:off
+  oracle: opencode-go/deepseek-v4-pro:xhigh
 memory: 
   backend: local
 compaction: 
