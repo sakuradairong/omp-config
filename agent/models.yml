@@ -7,10 +7,10 @@
 #   - requiresReasoningContentForToolCalls (false -> reasoning_content not persisted)
 #   - Thinking mode configuration
 #
+# Fix: Hardcode model overrides that apply AFTER dynamic discovery.
+#
 # References:
 #   https://api-docs.deepseek.com/zh-cn/quick_start/agent_integrations/oh_my_pi
-#
-# Fix: Hardcode model overrides that apply AFTER dynamic discovery.
 
 providers:
   # ====== OpenCode Go Proxy (default route) ======

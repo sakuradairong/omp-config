@@ -55,13 +55,10 @@
 ## 要点
 
 ### 模型配置
-
 - **主提供方**: OpenCode Go API（`opencode-go`，通过 `opencode.ai/zen/go/v1` 代理）
-- **默认模型**: `deepseek-v4-pro`（推理模式 xhigh）
-- **规划**: `deepseek-v4-pro`（medium）
-- **慢速/审查**: `deepseek-v4-pro`（xhigh/low）
-- **快速/轻量**: `deepseek-v4-flash`（xhigh/off）
-- **视觉模型**: `qwen3.5-plus`
+- **默认模型**: `deepseek-v4-flash`（推理模式 xhigh）
+- **规划/慢速**: `deepseek-v4-pro`（xhigh）
+- **视觉模型**: `qwen3.5-plus`（high）
 - **模型覆盖**: `models.yml` 补充了 OpenCode Go API 动态发现缺失的 reasoning/compat 标志
   - `maxTokensField: max_tokens`（DeepSeek 使用 max_tokens 而非 max_completion_tokens）
   - `requiresAssistantContentForToolCalls: true`（DeepSeek 工具调用需非空 content）
@@ -70,23 +67,14 @@
 - **直连备选**: `deepseek` provider 直连 DeepSeek API 的完整覆盖
 - **Anthropic 格式**: `deepseek-anthropic` provider 通过 Anthropic Messages API 访问 DeepSeek
 ### 模型角色
-
 | 角色 | 模型 | 推理级别 |
 |------|------|----------|
-| default | deepseek-v4-pro | xhigh |
+| default | deepseek-v4-flash | xhigh |
+| plan | deepseek-v4-pro | xhigh |
 | slow | deepseek-v4-pro | xhigh |
-| plan | deepseek-v4-pro | medium |
-| reviewer | deepseek-v4-pro | low |
-| oracle | deepseek-v4-pro | xhigh |
-| task | deepseek-v4-flash | xhigh |
-| explore | deepseek-v4-flash | xhigh |
 | designer | deepseek-v4-flash | xhigh |
-| librarian | deepseek-v4-flash | xhigh |
-| smol | deepseek-v4-flash | off |
-| commit | deepseek-v4-flash | off |
-| quick_task | deepseek-v4-flash | off |
+| smol | deepseek-v4-flash | xhigh |
 | vision | qwen3.5-plus | high |
-
 ### Hooks（钩子）
 
 所有钩子使用 `@oh-my-pi/pi-coding-agent/extensibility/hooks` API，兼容 OMP 15.3.x。
