@@ -1,42 +1,40 @@
 # Oh My Pi (OMP) 配置合集
 
-个人的 [Oh My Pi](https://github.com/oh-my-pi/omp) 编码代理配置，已脱敏可用于参考或复用。
-
-融合了 [kmou424/omp-agent](https://git.kmou424.moe:8443/configs/omp-agent) 的结构化最佳实践。
-
+个人的 [Oh My Pi](https://github.com/oh-my-pi/omp) 编码代理配置，完整同步自 `~/.omp/`。
 ## 目录结构
 
 ```
 ~/.omp/
 ├── CLAUDE.md                                   # Agent 行为指令 + 全局工作流
-├── skills/                                     # 全局技能（17个 superpowers 技能）
+├── .gitignore                                  # 排除运行时文件
+├── skills/                                     # 全局技能（18 个）
 │   ├── brainstorming/                          # 结构化构思
-│   ├── writing-plans/                          # 分步实施计划
-│   ├── test-driven-development/               # TDD
-│   ├── systematic-debugging/                  # 系统化调试
-│   ├── verification-before-completion/        # 完成前验证
-│   ├── ...（共 17 个）
+│   ├── ecc/                                    # ECC 技能集（249 个）
+│   ├── ...（共 18 个技能目录）
 └── agent/
     ├── config.yml                              # 主配置（角色/压缩/模型/扩展）
     ├── models.yml                              # 模型定义 + DeepSeek V4 覆盖
     ├── mcp.json                                # MCP 服务（gitnexus）
     ├── .env.example                            # 环境变量模板
     ├── .gitignore
-    ├── agents/
-    │   ├── librarian.md                        # 库搜索子代理
+    ├── agents/                                 # 子代理（70 个）
+    │   ├── task.md                             # 通用子代理
+    │   ├── explore.md                          # 代码探索子代理
     │   ├── plan.md                             # 架构规划子代理
     │   ├── reviewer.md                         # 代码审查子代理
-    │   ├── explore.md                          # 代码探索子代理
-    │   ├── designer.md                         # 设计/UI 子代理
-    │   ├── task.md                             # 通用子代理
-    │   └── quick_task.md                       # 轻量子代理
+    │   ├── ecc-planner.md                      # ECC 规划代理
+    │   ├── ecc-code-reviewer.md                # ECC 代码审查代理
+    │   └── ...（共 70 个代理定义）
     ├── hooks/
-    │   └── pre/
-    │       ├── guard-destructive.ts            # 安全守卫：拦截危险 bash 命令
-    │       ├── opencode-deepseek-cot.ts        # DeepSeek reasoning_content 补全
-    │       ├── opencode-deepseek-tool-repair.ts# DeepSeek 工具参数修复（15 种模式）
-    │       ├── opencode-deepseek-edit-anchor.ts# edit 锚点格式验证
-    │       └── opencode-deepseek-tool-result.ts# 工具结果格式化/非空保证
+    │   ├── pre/
+    │   │   ├── guard-destructive.ts            # 安全守卫：拦截危险 bash 命令
+    │   │   ├── opencode-deepseek-cot.ts        # DeepSeek reasoning_content 补全
+    │   │   ├── opencode-deepseek-tool-repair.ts# DeepSeek 工具参数修复
+    │   │   ├── opencode-deepseek-edit-anchor.ts# edit 锚点格式验证
+    │   │   └── opencode-deepseek-tool-result.ts# 工具结果格式化
+    │   └── post/
+    │       ├── redact-secrets.ts               # 工具输出脱敏
+    │       └── truncate-output.ts              # 超长输出截断
     └── skills/                                 # Agent 技能（12 个）
         ├── deepseek-tool-calling/              # DeepSeek V4 工具调用最佳实践
         ├── conventional-commits/               # Conventional Commits 规范
@@ -67,6 +65,7 @@
 - **直连备选**: `deepseek` provider 直连 DeepSeek API 的完整覆盖
 - **Anthropic 格式**: `deepseek-anthropic` provider 通过 Anthropic Messages API 访问 DeepSeek
 ### 模型角色
+
 | 角色 | 模型 | 推理级别 |
 |------|------|----------|
 | default | deepseek-v4-flash | xhigh |
@@ -75,9 +74,12 @@
 | designer | deepseek-v4-flash | xhigh |
 | smol | deepseek-v4-flash | xhigh |
 | vision | qwen3.5-plus | high |
+
 ### Hooks（钩子）
 
 所有钩子使用 `@oh-my-pi/pi-coding-agent/extensibility/hooks` API，兼容 OMP 15.3.x。
+
+#### Pre-hooks（工具调用前）
 
 | Hook | 事件 | 功能 |
 |------|------|------|
@@ -87,11 +89,32 @@
 | `opencode-deepseek-edit-anchor` | `tool_call` | 验证 edit 锚点 `LINE+HASH` 格式正确性 |
 | `opencode-deepseek-tool-result` | `tool_result` | 工具结果格式化（非空保证、ANSI 清理、摘要行） |
 
+#### Post-hooks（工具结果后）
+
+| Hook | 事件 | 功能 |
+|------|------|------|
+| `redact-secrets` | `tool_result` | 输出中脱敏 API Key、Token 等密钥 |
+| `truncate-output` | `tool_result` | 超长输出（>50KB）截断并标记 |
+
+### Agents（子代理）
+
+`agent/agents/` 目录包含 70 个子代理定义，格式为 Markdown 指令文件：
+
+| 类别 | 代理 |
+|------|------|
+| **通用** | `task`、`explore`、`plan`、`reviewer`、`designer`、`librarian`、`quick_task` |
+| **ECC 审查** | `ecc-code-reviewer`、`ecc-cpp-reviewer`、`ecc-csharp-reviewer`、`ecc-django-reviewer`、`ecc-fastapi-reviewer`、`ecc-flutter-reviewer`、`ecc-fsharp-reviewer`、`ecc-go-reviewer`、`ecc-java-reviewer`、`ecc-kotlin-reviewer`、`ecc-python-reviewer`、`ecc-react-reviewer`、`ecc-rust-reviewer`、`ecc-swift-reviewer`、`ecc-typescript-reviewer`、`ecc-mle-reviewer`、`ecc-healthcare-reviewer`、`ecc-network-config-reviewer` |
+| **ECC 构建** | `ecc-build-error-resolver`、`ecc-cpp-build-resolver`、`ecc-dart-build-resolver`、`ecc-django-build-resolver`、`ecc-go-build-resolver`、`ecc-java-build-resolver`、`ecc-kotlin-build-resolver`、`ecc-pytorch-build-resolver`、`ecc-react-build-resolver`、`ecc-rust-build-resolver`、`ecc-swift-build-resolver` |
+| **ECC 架构** | `ecc-architect`、`ecc-code-architect`、`ecc-code-explorer`、`ecc-code-simplifier`、`ecc-network-architect`、`ecc-homelab-architect`、`ecc-planner`、`ecc-harness-optimizer` |
+| **ECC 安全** | `ecc-security-reviewer`、`ecc-security-scan`、`ecc-silent-failure-hunter`、`ecc-type-design-analyzer`、`ecc-pr-test-analyzer`、`ecc-comment-analyzer` |
+| **ECC 测试** | `ecc-e2e-runner`、`ecc-tdd-guide`、`ecc-gan-planner`、`ecc-gan-generator`、`ecc-gan-evaluator` |
+| **ECC 其他** | `ecc-a11y-architect`、`ecc-chief-of-staff`、`ecc-doc-updater`、`ecc-docs-lookup`、`ecc-conversation-analyzer`、`ecc-database-reviewer`、`ecc-homelab-architect`、`ecc-marketing-agent`、`ecc-network-troubleshooter`、`ecc-network-config-reviewer`、`ecc-loop-operator`、`ecc-opensource-forker`、`ecc-opensource-sanitizer`、`ecc-opensource-packager`、`ecc-performance-optimizer`、`ecc-refactor-cleaner`、`ecc-harmonyos-app-resolver`、`ecc-seo-specialist` |
+
 ### Skills
 
 #### 全局技能（`~/.omp/skills/`）
 
-Superpowers 工作流技能集，17 个 `<name>/SKILL.md` 格式，通过 `customDirectories: [/root/.omp/skills]` 加载。
+ECC 技能集（249 个）+ Superpowers 工作流技能集（17 个），共 18 个技能目录，通过 `customDirectories: [/root/.omp/skills]` 加载。
 
 | 技能 | 用途 |
 |------|------|
@@ -111,6 +134,7 @@ Superpowers 工作流技能集，17 个 `<name>/SKILL.md` 格式，通过 `custo
 | `writing-skills` | 技能编写指南 |
 | `spike` | 快速技术验证 |
 | `plan-execute-review-commit` | 四阶段工作流 |
+| `ecc/` | ECC 技能集，249 个跨领域技能（自动发现） |
 | `astrbot-plugin-development` | AstrBot 插件开发参考 |
 
 #### Agent 技能（`~/.omp/agent/skills/`）
