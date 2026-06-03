@@ -1,0 +1,18 @@
+# OMP runtime files
+natives/
+cache/
+logs/
+sessions/
+blobs/
+memories/
+terminal-sessions/
+puppeteer/
+
+# Auto-generated
+RULES.md
+gpu_cache.json
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
